@@ -4,6 +4,8 @@ annotated-types==0.7.0
 anyio==4.14.0
 certifi==2026.6.17
 charset-normalizer==3.4.7
+defusedxml==0.7.1
+distro==1.9.0
 docstring-parser==0.18.0
 gitdb==4.0.12
 gitpython==3.1.50
@@ -14,10 +16,14 @@ httpcore==1.0.9
 httpx==0.28.1
 hyperframe==6.1.0
 idna==3.18
+jiter==0.15.0
 markdown-it-py==4.2.0
 mdurl==0.1.2
+openai==2.43.0
 packaging==26.2
 pip==24.3.1
+praw==8.0.1
+prawcore==4.0.0
 pydantic==2.13.4
 pydantic-core==2.46.4
 pydantic-settings==2.14.1
@@ -29,8 +35,11 @@ requests==2.34.2
 rich==15.0.0
 shellingham==1.5.4
 smmap==5.0.3
+sniffio==1.3.1
+tqdm==4.68.3
 typer==0.26.7
 typing-extensions==4.15.0
 typing-inspection==0.4.2
+update-checker==1.0.0
 urllib3==2.7.0
-openai==2.43.0
+websocket-client==1.9.0
