@@ -216,3 +216,31 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Redux
+k.states
+assets/external/
+
+**/*.db
+**/*.ipynb
+**/*.swp
+**/.DS_Store
+**/.web
+**/node_modules/**
+**/package-lock.json
+**/package.json
+
+*.db
+
+.vscode
+.web
+
+backend.zip
+bun.lockb
+dist/*
+frontend.zip
+
+poetry.lock
+
+*.env
+.states

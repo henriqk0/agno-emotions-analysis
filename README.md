@@ -1,2 +1,9 @@
 # agno-emotions-analysis
-agno agent in accord with repo name
+
+Agno agent in accord with repo name
+
+### Main Stack and Libs
+
+- Python
+- Reflex
+- Agno
