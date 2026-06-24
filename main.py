@@ -2,10 +2,13 @@
 
 # After install requirements, if you want run reflex
 # Go to terminal and:
-# 1. Initialize Reflex
-#    run: reflex init
-# 2. Build frontend
-#    run: reflex export
+## 1. Initialize Reflex
+#     reflex init
+## 2. Build frontend
+#    reflex export
+## Or, only:
+#    reflex run
+
 
 import os
 
