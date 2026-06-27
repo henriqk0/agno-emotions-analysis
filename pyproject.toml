@@ -1,0 +1,17 @@
+[project]
+name = "agno-emotions-analysis"
+version = "0.1.0"
+description = "YouTube emotion analysis agent using Agno, OpenRouter and Reflex"
+requires-python = ">=3.12"
+dependencies = [
+    "agno",
+    "reflex",
+    "google-api-python-client",
+    "python-dotenv",
+    "openai>=2.44.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+]

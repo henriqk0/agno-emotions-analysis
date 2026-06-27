@@ -12,14 +12,14 @@ Agente em Python para buscar comentarios publicos do YouTube e analisar emocoes/
 
 ## Dependencias
 
-Este projeto usa o `requirements.txt` como fonte oficial de dependencias.
+Este projeto usa o `pyproject.toml` como fonte oficial de dependencias.
 
 Instale com o gerenciador de pacotes `uv`:
 
 ```bash
 uv venv .venv
 .venv\Scripts\activate
-uv pip install -r requirements.txt
+uv sync
 ```
 
 No macOS/Linux:
@@ -27,7 +27,7 @@ No macOS/Linux:
 ```bash
 uv venv .venv
 source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync
 ```
 
 Se ainda nao tiver o `uv` instalado:
@@ -83,10 +83,11 @@ O agente vai procurar videos populares relacionados ao tema, buscar comentarios 
 ```text
 main.py                     # entrada via terminal
 rxconfig.py                 # configuracao do Reflex
+pyproject.toml              # configuracao do projeto e dependencias
 src/chat/                   # UI e estado da aplicacao Reflex
+src/core/agent.py           # fabrica de agentes Agno (OpenRouter + skills)
 src/core/                   # ferramentas e integracoes de dominio
 docs/PROMPTS.md             # notas e prompts do projeto
-requirements.txt            # fonte oficial de dependencias
 ```
 
 ## Quota da YouTube Data API
