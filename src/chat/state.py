@@ -5,7 +5,7 @@ from agno.agent import Agent
 from agno.models.openrouter import OpenRouter
 from agno.skills import LocalSkills, Skills
 from dotenv import load_dotenv
-from src.core.YoutubeCommentTools import YouTubeCommentsTools
+from core.youtube_comment_tools import YouTubeCommentsTools
 
 load_dotenv()
 
@@ -21,6 +21,7 @@ agent = Agent(
         "Search for popular videos, fetch their top comments, and analyze sentiment/emotion",
         "Respect YouTube's API quota and terms of service",
         "Provide clear summaries of comment trends and audience reactions",
+        "Your answer must be in Brazillian Portuguese"
     ],
     tools=[YouTubeCommentsTools(api_key=youtube_api_key)],
     markdown=True,
