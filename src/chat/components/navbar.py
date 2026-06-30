@@ -98,6 +98,14 @@ def navbar():
             variant="soft",
             margin_inline_end="auto",
         ),
+        rx.select(
+            State.model_list,
+            value=State.current_model,
+            on_change=State.set_model,
+            placeholder="Model",
+            size="2",
+            variant="soft",
+        ),
         modal(
             rx.icon_button("message-square-plus"),
         ),

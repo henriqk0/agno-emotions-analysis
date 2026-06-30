@@ -1,30 +1,16 @@
-from core.agent import AgentFactory
-from core.youtube_comment_tools import YouTubeCommentsTools
-
 from typing import Any, TypedDict
 from dotenv import load_dotenv
 import os
 
 import reflex as rx
 
+from core.settings import MODEL_LIST, DEFAULT_MODEL
+from core.services import AgentService
+
 load_dotenv()
 
 if not os.getenv("OPENROUTER_API_KEY"):
     raise Exception("Please set OPENROUTER_API_KEY environment variable.")
-
-youtube_api_key = os.getenv("YOUTUBE_DATA_API_KEY")
-
-youtube_agent = AgentFactory.create_agent(
-    model_id="poolside/laguna-m.1:free",
-    agent_instructions=[
-        "You are a YouTube content analyst that helps explore and understand YouTube data",
-        "Search for popular videos, fetch their top comments, and analyze sentiment/emotion",
-        "Respect YouTube's API quota and terms of service",
-        "Provide clear summaries of comment trends and audience reactions",
-        "Your answer must be in Brazillian Portuguese"
-    ],
-    available_tools=[YouTubeCommentsTools(api_key=youtube_api_key)]
-)
 
 class QA(TypedDict):
     question: str
@@ -41,6 +27,13 @@ class State(rx.State):
     processing: bool = False
 
     is_modal_open: bool = False
+
+    current_model: str = DEFAULT_MODEL
+    model_list: list[str] = MODEL_LIST
+
+    @rx.event
+    def set_model(self, model: str):
+        self.current_model = model
 
     @rx.event
     def create_chat(self, form_data: dict[str, Any]):
@@ -98,11 +91,8 @@ class State(rx.State):
         self.processing = True
         yield
 
-        prompt = f"Analyze the emotions expressed in the top comments of the most popular {question} videos"
-
-        for chunk in youtube_agent.run(prompt, stream=True):
-            if chunk.content:
-                self._chats[self.current_chat][-1]["answer"] += chunk.content
+        async for chunk in AgentService.run(question, self.current_model):
+            self._chats[self.current_chat][-1]["answer"] += chunk
             yield
 
         self.processing = False
