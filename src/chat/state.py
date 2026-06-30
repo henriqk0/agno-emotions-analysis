@@ -1,11 +1,11 @@
-import os
+from core.agent import AgentFactory
+from core.youtube_comment_tools import YouTubeCommentsTools
+
 from typing import Any, TypedDict
-import reflex as rx
-from agno.agent import Agent
-from agno.models.openrouter import OpenRouter
-from agno.skills import LocalSkills, Skills
 from dotenv import load_dotenv
-from src.core.YoutubeCommentTools import YouTubeCommentsTools
+import os
+
+import reflex as rx
 
 load_dotenv()
 
@@ -14,19 +14,17 @@ if not os.getenv("OPENROUTER_API_KEY"):
 
 youtube_api_key = os.getenv("YOUTUBE_DATA_API_KEY")
 
-agent = Agent(
-    model=OpenRouter(id="poolside/laguna-m.1:free"),
-    instructions=[
+youtube_agent = AgentFactory.create_agent(
+    model_id="poolside/laguna-m.1:free",
+    agent_instructions=[
         "You are a YouTube content analyst that helps explore and understand YouTube data",
         "Search for popular videos, fetch their top comments, and analyze sentiment/emotion",
         "Respect YouTube's API quota and terms of service",
         "Provide clear summaries of comment trends and audience reactions",
+        "Your answer must be in Brazillian Portuguese"
     ],
-    tools=[YouTubeCommentsTools(api_key=youtube_api_key)],
-    markdown=True,
-    skills=Skills(loaders=[LocalSkills(os.path.join(os.path.dirname(__file__), "..", "..", ".claude", "skills"))]),
+    available_tools=[YouTubeCommentsTools(api_key=youtube_api_key)]
 )
-
 
 class QA(TypedDict):
     question: str
@@ -102,7 +100,7 @@ class State(rx.State):
 
         prompt = f"Analyze the emotions expressed in the top comments of the most popular {question} videos"
 
-        for chunk in agent.run(prompt, stream=True):
+        for chunk in youtube_agent.run(prompt, stream=True):
             if chunk.content:
                 self._chats[self.current_chat][-1]["answer"] += chunk.content
             yield

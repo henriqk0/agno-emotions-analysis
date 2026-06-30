@@ -17,7 +17,7 @@ from agno.models.openrouter import OpenRouter
 from agno.skills import LocalSkills, Skills
 from dotenv import load_dotenv
 
-from src.core.YoutubeCommentTools import YouTubeCommentsTools
+from core.youtube_comment_tools import YouTubeCommentsTools
 
 load_dotenv()
 
