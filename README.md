@@ -78,6 +78,36 @@ python programming
 
 O agente vai procurar videos populares relacionados ao tema, buscar comentarios e analisar as emocoes expressas.
 
+## Funcionalidades
+
+### Análise de Emoções em Comentários do YouTube
+
+Digite um tema para buscar os vídeos mais populares e analisar as emoções presentes nos comentários.
+
+**Fluxo:**
+
+1. Informe o tema desejado (ex: "games", "tecnologia")
+2. O agente busca os vídeos mais populares e coleta os comentários
+3. A LLM analisa as emoções e retorna um relatório estruturado
+
+**Exemplo de saída:**
+
+```
+┌──────────────────────────────────────────────────┐
+│  Resumo da Análise                                │
+│  Texto com visão geral dos resultados...          │
+├──────────────────────┬───────────────────────────┤
+│  Distribuição Geral  │  Emoções Detalhadas        │
+│  (gráfico de pizza)  │  (gráfico de barras)       │
+├──────────────────────┴───────────────────────────┤
+│  Insights Principais                              │
+│  • Lista de descobertas relevantes                │
+├──────────────────────────────────────────────────┤
+│  Comentários em Destaque                          │
+│  "texto do comentário" — emoção identificada      │
+└──────────────────────────────────────────────────┘
+```
+
 ## Arquitetura
 
 ```text
@@ -85,6 +115,8 @@ main.py                     # entrada via terminal
 rxconfig.py                 # configuracao do Reflex
 pyproject.toml              # configuracao do projeto e dependencias
 src/chat/                   # UI e estado da aplicacao Reflex
+src/chat/pages/             # paginas da aplicacao (home, analysis)
+src/chat/components/        # componentes reutilizaveis (navbar)
 src/core/agent.py           # fabrica de agentes Agno (OpenRouter + skills)
 src/core/                   # ferramentas e integracoes de dominio
 docs/PROMPTS.md             # notas e prompts do projeto

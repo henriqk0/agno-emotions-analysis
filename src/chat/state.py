@@ -1,10 +1,11 @@
 from typing import Any, TypedDict
 from dotenv import load_dotenv
 import os
+import json
 
 import reflex as rx
 
-from core.settings import MODEL_LIST, DEFAULT_MODEL
+from core.settings import MODEL_LIST, DEFAULT_MODEL, EmotionAnalysisReport
 from core.services import AgentService
 
 load_dotenv()
@@ -12,87 +13,143 @@ load_dotenv()
 if not os.getenv("OPENROUTER_API_KEY"):
     raise Exception("Please set OPENROUTER_API_KEY environment variable.")
 
-class QA(TypedDict):
-    question: str
-    answer: str
+
+class Feature(TypedDict):
+    id: str
+    title: str
+    description: str
+    icon: str
 
 
 class State(rx.State):
-    _chats: dict[str, list[QA]] = {
-        "Intros": [],
-    }
-
-    current_chat = "Intros"
-
+    current_page: str = "home"
+    selected_feature: Feature | None = None
+    user_input: str = ""
     processing: bool = False
-
-    is_modal_open: bool = False
+    processing_stage: str = "idle"
+    analysis_result: EmotionAnalysisReport | None = None
+    error: str = ""
 
     current_model: str = DEFAULT_MODEL
     model_list: list[str] = MODEL_LIST
+
+    features: list[Feature] = [
+        Feature(
+            id="emotion-analysis",
+            title="Análise de Emoções em Comentários do YouTube",
+            description="Analise as emoções presentes nos comentários dos vídeos mais populares sobre qualquer tema.",
+            icon="message-square-heart",
+        ),
+    ]
+
+    steps: list[dict] = []
+
+    @rx.var
+    def distribution_data(self) -> list[dict]:
+        if not self.analysis_result:
+            return []
+        return [
+            {"name": k.capitalize(), "value": v}
+            for k, v in self.analysis_result["emotion_distribution"].items()
+        ]
+
+    @rx.var
+    def detailed_emotion_data(self) -> list[dict]:
+        if not self.analysis_result:
+            return []
+        return [
+            {"name": k.capitalize(), "value": v}
+            for k, v in self.analysis_result["detailed_emotions"].items()
+        ]
+
+    @rx.var
+    def is_processing(self) -> bool:
+        return self.processing_stage == "processing"
 
     @rx.event
     def set_model(self, model: str):
         self.current_model = model
 
     @rx.event
-    def create_chat(self, form_data: dict[str, Any]):
-        new_chat_name = form_data["new_chat_name"]
-        self.current_chat = new_chat_name
-        self._chats[new_chat_name] = []
-        self.is_modal_open = False
+    def go_home(self):
+        self.current_page = "home"
+        self.selected_feature = None
+        self.reset_analysis()
 
     @rx.event
-    def set_is_modal_open(self, is_open: bool):
-        self.is_modal_open = is_open
-
-    @rx.var
-    def selected_chat(self) -> list[QA]:
-        return (
-            self._chats[self.current_chat] if self.current_chat in self._chats else []
-        )
+    def select_feature(self, feature_id: str):
+        for f in self.features:
+            if f["id"] == feature_id:
+                self.selected_feature = f
+                self.current_page = "analysis"
+                break
 
     @rx.event
-    def delete_chat(self, chat_name: str):
-        if chat_name not in self._chats:
+    def set_input(self, value: str):
+        self.user_input = value
+
+    @rx.event
+    def reset_analysis(self):
+        self.user_input = ""
+        self.processing = False
+        self.processing_stage = "idle"
+        self.analysis_result = None
+        self.error = ""
+        self.steps = []
+
+    @rx.event
+    async def start_analysis(self, form_data: dict[str, Any] | None = None):
+        if not self.user_input.strip():
             return
-        del self._chats[chat_name]
-        if len(self._chats) == 0:
-            self._chats = {
-                "Intros": [],
-            }
-        if self.current_chat not in self._chats:
-            self.current_chat = list(self._chats.keys())[0]
 
-    @rx.event
-    def set_chat(self, chat_name: str):
-        self.current_chat = chat_name
+        print(f"[State] Iniciando análise para: {self.user_input}")
+        print(f"[State] Modelo: {self.current_model}")
 
-    @rx.event
-    def set_new_chat_name(self, new_chat_name: str):
-        self.new_chat_name = new_chat_name
-
-    @rx.var
-    def chat_titles(self) -> list[str]:
-        return list(self._chats.keys())
-
-    @rx.event
-    async def process_question(self, form_data: dict[str, Any]):
-        question = form_data["question"]
-        if not question:
-            return
-        async for value in self.agno_process_question(question):
-            yield value
-
-    @rx.event
-    async def agno_process_question(self, question: str):
-        qa = QA(question=question, answer="")
-        self._chats[self.current_chat].append(qa)
         self.processing = True
+        self.processing_stage = "processing"
+        self.analysis_result = None
+        self.error = ""
+        self.steps = []
         yield
 
-        async for chunk in AgentService.run(question, self.current_model):
-            self._chats[self.current_chat][-1]["answer"] += chunk
-            yield
+        try:
+            print("[State] Chamando AgentService.run()...")
+            async for raw in AgentService.run(self.user_input, self.current_model):
+                msg = json.loads(raw)
+                if msg["type"] == "step":
+                    if msg["step_type"] == "tool_call" and msg["status"] == "running":
+                        self.steps = [s for s in self.steps if s.get("status") != "running"]
+                        self.steps.append(msg)
+                    elif msg["step_type"] == "tool_call" and msg["status"] == "done":
+                        for i, s in enumerate(self.steps):
+                            if s.get("tool") == msg.get("tool"):
+                                self.steps[i] = msg
+                                break
+                        else:
+                            self.steps.append(msg)
+                    elif msg["step_type"] == "reasoning":
+                        self.steps.append(msg)
+                    yield
+
+                elif msg["type"] == "result":
+                    print("[State] Resultado recebido")
+                    report = EmotionAnalysisReport(**msg["data"])
+                    has_error = (
+                        report.summary.startswith("Erro")
+                        or report.summary.startswith("A API")
+                    ) if report.summary else False
+                    if has_error:
+                        print(f"[State] Relatório contém erro: {report.summary}")
+                        self.error = report.summary
+                        self.processing_stage = "idle"
+                    else:
+                        self.analysis_result = report
+                        print("[State] Análise concluída com sucesso")
+                        self.processing_stage = "complete"
+                    break
+        except Exception as e:
+            print(f"[State] ERRO na análise: {e}")
+            self.error = str(e)
+            self.processing_stage = "idle"
 
         self.processing = False

@@ -1,16 +1,19 @@
-"""The main Chat app."""
-
 import reflex as rx
 
-from chat.components import chat, navbar
+from chat.components import navbar
+from chat.pages.home import home_page
+from chat.pages.analysis import analysis_page
+from chat.state import State
 
 
 def index() -> rx.Component:
-    """The main app."""
     return rx.vstack(
         navbar(),
-        chat.chat(),
-        chat.action_bar(),
+        rx.match(
+            State.current_page,
+            ("home", home_page()),
+            ("analysis", analysis_page()),
+        ),
         background_color=rx.color("mauve", 1),
         color=rx.color("mauve", 12),
         height="100dvh",
@@ -19,6 +22,5 @@ def index() -> rx.Component:
     )
 
 
-# Add state and page to the app.
 app = rx.App()
 app.add_page(index)
