@@ -17,7 +17,7 @@ from agno.models.sambanova import Sambanova
 from agno.skills import LocalSkills, Skills
 from dotenv import load_dotenv
 
-from core.youtube_comment_tools import YouTubeCommentsTools
+from src.core.youtube_comment_tools import YouTubeCommentsTools
 
 load_dotenv()
 
