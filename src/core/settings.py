@@ -3,8 +3,8 @@ from pydantic import BaseModel, Field
 # Lista de modelos OpenRouter disponíveis para o usuário escolher na UI.
 # O primeiro da lista é o padrão.
 MODEL_LIST = [
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "poolside/laguna-m.1:free",
+    "Meta-Llama-3.3-70B-Instruct",
+    "gemma-4-31B-it",
 ]
 
 # Modelo selecionado por padrão quando a UI abre.

@@ -20,7 +20,11 @@ SCHEMA_EXAMPLE = json.dumps(
         "detailed_emotions": {"alegria": 0.30, "raiva": 0.15, "tristeza": 0.10, "surpresa": 0.08, "medo": 0.05},
         "key_insights": ["Insight principal 1", "Insight principal 2"],
         "top_comments": [
-            {"text": "Texto do comentário em destaque", "emotion": "alegria"},
+                {"text": "Ótimo vídeo, muito informativo!", "emotion": "alegria"},
+                {"text": "Isso me deixou bem irritado.", "emotion": "raiva"},
+                {"text": "Fiquei surpreso com os dados apresentados.", "emotion": "surpresa"},
+                {"text": "Triste ver isso acontecendo.", "emotion": "tristeza"},
+                {"text": "Isso me deixou com medo do futuro.", "emotion": "medo"},
         ],
     },
     indent=2,
@@ -158,7 +162,10 @@ class AgentService:
             f"of the most popular {question} videos.\n\n"
             f"Return ONLY a JSON object with this exact structure "
             f"(no markdown, no extra text):\n{SCHEMA_EXAMPLE}\n\n"
-            "All fields are required. Use Portuguese for text values."
+            "Use only the example structure; do not copy the example values. "
+            "Generate actual emotion distribution values and insights based on the current topic. "
+            "Include up to 5 representative `top_comments` (each with `text` and `emotion`). "
+            "If fewer comments are available, return as many as found. Use Portuguese for text values."
         )
 
         # Tenta o modelo atual primeiro; se esgotar retries, tenta os demais.

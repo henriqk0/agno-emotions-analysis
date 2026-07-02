@@ -20,6 +20,9 @@ def summary_card() -> rx.Component:
 
 
 def emotion_pie_chart() -> rx.Component:
+    palette = ["#4f46e5", "#ec4899", "#10b981", "#f59e0b", "#3b82f6", "#8b5cf6"]
+    pie_cells = [rx.recharts.cell(fill=color) for color in palette]
+
     return rx.card(
         rx.vstack(
             rx.hstack(
@@ -37,6 +40,9 @@ def emotion_pie_chart() -> rx.Component:
                     cy="50%",
                     outer_radius="60%",
                     label=True,
+                    stroke="#ffffff",
+                    stroke_width=2,
+                    *pie_cells,
                 ),
                 rx.recharts.legend(),
                 width="100%",
@@ -50,6 +56,9 @@ def emotion_pie_chart() -> rx.Component:
 
 
 def detailed_bar_chart() -> rx.Component:
+    palette = ["#4f46e5", "#ec4899", "#10b981", "#f59e0b", "#3b82f6", "#8b5cf6"]
+    bar_cells = [rx.recharts.cell(fill=color) for color in palette]
+
     return rx.card(
         rx.vstack(
             rx.hstack(
@@ -61,10 +70,12 @@ def detailed_bar_chart() -> rx.Component:
             rx.recharts.bar_chart(
                 rx.recharts.bar(
                     data_key="value",
-                    fill=rx.color("accent", 7),
                     radius=[4, 4, 0, 0],
+                    *bar_cells,
                 ),
-                rx.recharts.x_axis(data_key="name"),
+                rx.recharts.x_axis(
+                    data_key="name",
+                    tick={"fill": "white"}),
                 rx.recharts.y_axis(),
                 rx.recharts.tooltip(),
                 data=State.detailed_emotion_data,

@@ -1,17 +1,17 @@
-from typing import Any, TypedDict
-from dotenv import load_dotenv
-import os
 import json
+import os
+from typing import Any, TypedDict
 
 import reflex as rx
+from dotenv import load_dotenv
 
-from core.settings import MODEL_LIST, DEFAULT_MODEL, EmotionAnalysisReport
 from core.services import AgentService
+from core.settings import DEFAULT_MODEL, MODEL_LIST, EmotionAnalysisReport
 
 load_dotenv()
 
-if not os.getenv("OPENROUTER_API_KEY"):
-    raise Exception("Please set OPENROUTER_API_KEY environment variable.")
+if not os.getenv("SAMBANOVA_API_KEY"):
+    raise Exception("Please set SAMBANOVA_API_KEY environment variable.")
 
 
 class Feature(TypedDict):
@@ -48,18 +48,32 @@ class State(rx.State):
     def distribution_data(self) -> list[dict]:
         if not self.analysis_result:
             return []
+
+        # CHANGED: supports both dict and EmotionAnalysisReport
+        if isinstance(self.analysis_result, dict):
+            distribution = self.analysis_result.get("emotion_distribution", {})
+        else:
+            distribution = self.analysis_result.emotion_distribution
+
         return [
             {"name": k.capitalize(), "value": v}
-            for k, v in self.analysis_result["emotion_distribution"].items()
+            for k, v in distribution.items()
         ]
 
     @rx.var
     def detailed_emotion_data(self) -> list[dict]:
         if not self.analysis_result:
             return []
+
+        # CHANGED: supports both dict and EmotionAnalysisReport
+        if isinstance(self.analysis_result, dict):
+            emotions = self.analysis_result.get("detailed_emotions", {})
+        else:
+            emotions = self.analysis_result.detailed_emotions
+
         return [
             {"name": k.capitalize(), "value": v}
-            for k, v in self.analysis_result["detailed_emotions"].items()
+            for k, v in emotions.items()
         ]
 
     @rx.var
@@ -116,10 +130,15 @@ class State(rx.State):
             print("[State] Chamando AgentService.run()...")
             async for raw in AgentService.run(self.user_input, self.current_model):
                 msg = json.loads(raw)
+
                 if msg["type"] == "step":
                     if msg["step_type"] == "tool_call" and msg["status"] == "running":
-                        self.steps = [s for s in self.steps if s.get("status") != "running"]
+                        self.steps = [
+                            s for s in self.steps
+                            if s.get("status") != "running"
+                        ]
                         self.steps.append(msg)
+
                     elif msg["step_type"] == "tool_call" and msg["status"] == "done":
                         for i, s in enumerate(self.steps):
                             if s.get("tool") == msg.get("tool"):
@@ -127,26 +146,34 @@ class State(rx.State):
                                 break
                         else:
                             self.steps.append(msg)
+
                     elif msg["step_type"] == "reasoning":
                         self.steps.append(msg)
+
                     yield
 
                 elif msg["type"] == "result":
                     print("[State] Resultado recebido")
+
                     report = EmotionAnalysisReport(**msg["data"])
+
                     has_error = (
                         report.summary.startswith("Erro")
                         or report.summary.startswith("A API")
                     ) if report.summary else False
+
                     if has_error:
                         print(f"[State] Relatório contém erro: {report.summary}")
                         self.error = report.summary
                         self.processing_stage = "idle"
+
                     else:
                         self.analysis_result = report
                         print("[State] Análise concluída com sucesso")
                         self.processing_stage = "complete"
+
                     break
+
         except Exception as e:
             print(f"[State] ERRO na análise: {e}")
             self.error = str(e)

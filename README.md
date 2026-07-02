@@ -41,13 +41,13 @@ pip install uv
 Crie um arquivo `.env` na raiz do projeto com base no `.env.example`:
 
 ```env
-OPENROUTER_API_KEY=<YOUR_OPENROUTER_API_KEY>
+SAMBANOVA_API_KEY=<YOUR_SAMBANOVA_API_KEY>
 YOUTUBE_DATA_API_KEY=<YOUR_YOUTUBE_DATA_API_KEY>
 ```
 
 Onde conseguir as chaves:
 
-- `OPENROUTER_API_KEY`: crie uma chave em https://openrouter.ai/
+- `OPENROUTER_API_KEY`: crie uma chave em https://cloud.sambanova.ai/
 - `YOUTUBE_DATA_API_KEY`: crie uma chave no Google Cloud Console com a **YouTube Data API v3** ativada.
 
 Para a chave do YouTube, use acesso a **dados publicos**. Nao e necessario OAuth nem conta de servico para ler comentarios publicos.
