@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 # Lista de modelos OpenRouter disponíveis para o usuário escolher na UI.
 # O primeiro da lista é o padrão.
 MODEL_LIST = [
-    "Meta-Llama-3.3-70B-Instruct",
+    "DeepSeek-V3.1",
     "gemma-4-31B-it",
 ]
 
