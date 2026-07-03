@@ -15,9 +15,7 @@ SKILLS_PATH = os.path.join(
     "skills",
 )
 
-DEFAULT_INSTRUCTIONS = (
-    "Answer like a panda.",
-)
+DEFAULT_INSTRUCTIONS = "Answer like a panda."
 
 
 class AgentFactory:
@@ -34,14 +32,14 @@ class AgentFactory:
     @staticmethod
     def create_agent(
         model_id: str,
-        agent_instructions: Sequence[str] = DEFAULT_INSTRUCTIONS,
+        agent_instructions: str | Sequence[str] = DEFAULT_INSTRUCTIONS,
         available_tools: Sequence | None = None,
     ) -> Agent:
         """Cria e retorna um agente Agno configurado.
 
         Args:
             model_id: Identificador do modelo no Sambanova.
-            agent_instructions: Lista de instruções de sistema para a LLM.
+            agent_instructions: Instruções de sistema para a LLM.
             available_tools: Ferramentas (Toolkit) que o agente pode usar.
 
         Returns:
@@ -60,7 +58,7 @@ class AgentFactory:
             model=Sambanova(id=model_id),
             instructions=agent_instructions,
             tools=available_tools or [],
-            markdown=True,
+            markdown=False,
             skills=Skills(loaders=[LocalSkills(SKILLS_PATH)]),
         )
         print(f"[AgentFactory] Agente criado com sucesso (modelo: {model_id})")

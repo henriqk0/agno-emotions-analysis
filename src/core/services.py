@@ -79,6 +79,23 @@ def _tool_args_summary(args_str: str) -> str:
         return args_str[:60]
 
 
+def _tool_args_summary_from_dict(args: dict | None) -> str:
+    """Extrai um resumo legível de argumentos de tool já parseados."""
+    if not args:
+        return ""
+    query = args.get("query", "")
+    video_id = args.get("video_id", "")
+    max_results = args.get("max_results", "")
+    parts = []
+    if query:
+        parts.append(f'"{query}"')
+    if max_results:
+        parts.append(f"{max_results} resultados")
+    if video_id and not query:
+        parts.append(video_id[:12])
+    return ", ".join(parts) if parts else json.dumps(args, ensure_ascii=False)[:60]
+
+
 def _tool_label(name: str, args_summary: str) -> str:
     """Gera o label amigável de uma tool call para a timeline da UI.
 
@@ -94,6 +111,108 @@ def _tool_label(name: str, args_summary: str) -> str:
         "get_video_comments": f"💬 Coletando comentários ({args_summary})",
     }
     return labels.get(name, f"🔧 {name}: {args_summary}")
+
+
+def _extract_tool_steps(response) -> list[tuple[str, str]]:
+    """Extrai tool calls reais das mensagens do agente.
+
+    Returns:
+        Lista de tuplas (tool_name, label) para exibir na timeline.
+    """
+    steps = []
+    for tool in getattr(response, "tools", None) or []:
+        name = getattr(tool, "tool_name", None)
+        if name:
+            args_summary = _tool_args_summary_from_dict(getattr(tool, "tool_args", None))
+            steps.append((name, _tool_label(name, args_summary)))
+
+    if steps:
+        return steps
+
+    for msg in response.messages or []:
+        tool_calls = getattr(msg, "tool_calls", None) or []
+        for tc in tool_calls:
+            fn = getattr(tc, "function", None)
+            if fn:
+                args_summary = _tool_args_summary(fn.arguments or "{}")
+                label = _tool_label(fn.name, args_summary)
+                steps.append((fn.name, label))
+    return steps
+
+
+def _used_required_youtube_tools(response) -> bool:
+    """Confirma que a resposta foi baseada em busca e comentários reais."""
+    tool_names = {name for name, _ in _extract_tool_steps(response)}
+    return {"search_videos", "get_video_comments"}.issubset(tool_names)
+
+
+def _collected_comment_texts(response) -> set[str]:
+    """Retorna os textos reais coletados por get_video_comments."""
+    return {comment["text"].strip() for comment in _collected_comments(response) if comment.get("text")}
+
+
+def _collected_comments(response) -> list[dict]:
+    """Retorna comentários reais coletados pelas tools em uma lista plana."""
+    comments = []
+    for tool in getattr(response, "tools", None) or []:
+        if getattr(tool, "tool_name", None) != "get_video_comments":
+            continue
+        video_id = (getattr(tool, "tool_args", None) or {}).get("video_id", "")
+        try:
+            tool_comments = json.loads(getattr(tool, "result", "") or "[]")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(tool_comments, list):
+            continue
+        for comment in tool_comments:
+            if isinstance(comment, dict) and comment.get("text"):
+                comments.append({
+                    "video_id": video_id,
+                    "text": comment.get("text", ""),
+                    "likes": comment.get("likes", 0),
+                    "published_at": comment.get("published_at", ""),
+                })
+    return comments
+
+
+def _top_comments_are_from_tools(raw: str, response) -> bool:
+    """Garante que os comentários destacados vieram da API do YouTube."""
+    collected_texts = _collected_comment_texts(response)
+    if not collected_texts:
+        return False
+
+    try:
+        report = json.loads(raw)
+    except json.JSONDecodeError:
+        return False
+
+    top_comments = report.get("top_comments", [])
+    if not top_comments:
+        return True
+
+    collected_normalized = {text.casefold() for text in collected_texts}
+    for comment in top_comments:
+        text = comment.get("text", "").strip() if isinstance(comment, dict) else ""
+        if text.casefold() not in collected_normalized:
+            return False
+    return True
+
+
+def _build_analysis_prompt(question: str, comments: list[dict]) -> str:
+    """Monta prompt de análise a partir dos comentários já coletados."""
+    comments_json = json.dumps(comments[:120], ensure_ascii=False, indent=2)
+    return (
+        f"Tema analisado: {question}\n\n"
+        "Abaixo estão comentários reais coletados da API do YouTube. "
+        "Analise somente estes comentários, sem inventar dados externos.\n\n"
+        f"COMENTÁRIOS COLETADOS:\n{comments_json}\n\n"
+        "Retorne APENAS um objeto JSON válido, sem markdown, sem bloco de código e sem texto extra. "
+        f"Use exatamente esta estrutura:\n{SCHEMA_EXAMPLE}\n\n"
+        "Use apenas a estrutura do exemplo; não copie os valores do exemplo. "
+        "Em top_comments, escolha até 5 comentários representativos da lista acima e mantenha o campo text "
+        "exatamente igual ao comentário coletado, sem traduzir, resumir ou reescrever. "
+        "Escreva summary, key_insights e nomes de emotion em Português do Brasil."
+    )
 
 
 def _error_report(msg: str) -> str:
@@ -158,14 +277,20 @@ class AgentService:
             return
 
         prompt = (
-            f"Analyze the emotions expressed in the top comments "
-            f"of the most popular {question} videos.\n\n"
-            f"Return ONLY a JSON object with this exact structure "
-            f"(no markdown, no extra text):\n{SCHEMA_EXAMPLE}\n\n"
-            "Use only the example structure; do not copy the example values. "
-            "Generate actual emotion distribution values and insights based on the current topic. "
-            "Include up to 5 representative `top_comments` (each with `text` and `emotion`). "
-            "If fewer comments are available, return as many as found. Use Portuguese for text values."
+            f"Tema solicitado pelo usuário: {question}\n\n"
+            "Execute obrigatoriamente este fluxo antes de responder:\n"
+            "1. Chame a ferramenta search_videos para encontrar os vídeos mais populares e relevantes sobre o tema.\n"
+            "2. A partir dos video_id retornados, chame a ferramenta get_video_comments para coletar comentários reais.\n"
+            "3. Analise as emoções expressas somente nos comentários retornados pelas ferramentas.\n"
+            "4. Só depois das tool calls, retorne a resposta final.\n\n"
+            "A resposta final deve ser APENAS um objeto JSON válido, sem markdown, sem bloco de código "
+            f"e sem texto extra. Use exatamente esta estrutura:\n{SCHEMA_EXAMPLE}\n\n"
+            "Use apenas a estrutura do exemplo; não copie os valores do exemplo. "
+            "Gere distribuições de emoção, insights e comentários representativos com base nos dados coletados. "
+            "Inclua até 5 top_comments representativos, cada um com text e emotion. "
+            "Em top_comments, mantenha o campo text exatamente como retornado pela ferramenta, sem traduzir ou reescrever. "
+            "Se houver menos comentários disponíveis, retorne apenas os encontrados. "
+            "Escreva summary, key_insights e nomes de emotion em Português do Brasil."
         )
 
         # Tenta o modelo atual primeiro; se esgotar retries, tenta os demais.
@@ -190,8 +315,47 @@ class AgentService:
                 try:
                     response = agent.run(prompt, stream=False)
                     raw = _extract_json(response.content or "")
-                    if raw:
+                    if (
+                        raw
+                        and _used_required_youtube_tools(response)
+                        and _top_comments_are_from_tools(raw, response)
+                    ):
                         break
+                    if raw:
+                        if _used_required_youtube_tools(response):
+                            collected_comments = _collected_comments(response)
+                            if collected_comments:
+                                print(
+                                    "[AgentService] Reanalisando comentários coletados sem tool calling..."
+                                )
+                                analysis_agent = AgentFactory.create_agent(
+                                    model_id=model,
+                                    agent_instructions=(
+                                        "Você é um analista de emoções. "
+                                        "Receba comentários reais já coletados e retorne apenas JSON válido. "
+                                        "Não use markdown e não invente comentários."
+                                    ),
+                                    available_tools=[],
+                                )
+                                analysis_response = analysis_agent.run(
+                                    _build_analysis_prompt(question, collected_comments),
+                                    stream=False,
+                                )
+                                analysis_raw = _extract_json(analysis_response.content or "")
+                                if (
+                                    analysis_raw
+                                    and _top_comments_are_from_tools(analysis_raw, response)
+                                ):
+                                    raw = analysis_raw
+                                    break
+
+                        last_error = (
+                            "Modelo retornou JSON sem evidência suficiente de dados reais do YouTube."
+                        )
+                        print(f"[AgentService] {last_error}")
+                        raw = ""
+                        await asyncio.sleep(2 ** attempt)
+                        continue
                     last_error = response.content[:200]
                     print(f"[AgentService] Sem JSON na resposta, aguardando {2 ** attempt}s...")
                     await asyncio.sleep(2 ** attempt)
@@ -212,15 +376,7 @@ class AgentService:
             return
 
         # Extrai tool calls reais da mensagens do agente para exibir na timeline.
-        steps = []
-        for msg in response.messages or []:
-            tool_calls = getattr(msg, "tool_calls", None) or []
-            for tc in tool_calls:
-                fn = getattr(tc, "function", None)
-                if fn:
-                    args_summary = _tool_args_summary(fn.arguments or "{}")
-                    label = _tool_label(fn.name, args_summary)
-                    steps.append(label)
+        steps = [label for _, label in _extract_tool_steps(response)]
 
         print(f"[AgentService] Steps detectados: {len(steps)}")
         for label in steps:

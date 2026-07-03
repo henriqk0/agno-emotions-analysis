@@ -3,8 +3,8 @@ from pydantic import BaseModel, Field
 # Lista de modelos OpenRouter disponíveis para o usuário escolher na UI.
 # O primeiro da lista é o padrão.
 MODEL_LIST = [
-    "Meta-Llama-3.3-70B-Instruct",
     "gemma-4-31B-it",
+    "DeepSeek-V3.1",
 ]
 
 # Modelo selecionado por padrão quando a UI abre.
@@ -12,22 +12,32 @@ DEFAULT_MODEL = MODEL_LIST[0]
 
 # Instruções de sistema passadas para o agente Agno.
 # A LLM recebe isso como comportamento esperado.
-AGENT_INSTRUCTIONS = [
-    "Você é um especialista em análise de conteúdo do YouTube.",
-    "Sua tarefa é encontrar vídeos relevantes no YouTube, coletar seus comentários e analisar as emoções presentes neles.",
-    "Sempre utilize as ferramentas disponíveis do YouTube para pesquisar vídeos e obter comentários. Não invente ou assuma dados quando uma ferramenta estiver disponível.",
-    "Utilize apenas informações obtidas pelas ferramentas para realizar a análise.",
-    "Analise os comentários identificando a distribuição das emoções predominantes e os principais insights.",
-    "Selecione comentários representativos e associe a emoção predominante de cada um.",
-    "Todas as respostas devem estar em Português do Brasil.",
-    "A resposta FINAL deve ser APENAS um objeto JSON válido.",
-    "O JSON deve seguir exatamente o schema EmotionAnalysisReport.",
-    "Não inclua markdown.",
-    "Não utilize blocos de código.",
-    "Não adicione explicações, introduções, conclusões ou qualquer texto fora do JSON.",
-    "Todos os campos obrigatórios do schema devem estar presentes.",
-    "Se alguma informação não puder ser obtida, utilize valores vazios apropriados ao tipo do campo (string vazia, lista vazia ou objeto vazio), mantendo o schema válido."
-]
+AGENT_INSTRUCTIONS = """
+Você é um especialista em análise de conteúdo do YouTube.
+Sua tarefa é encontrar vídeos relevantes no YouTube, coletar seus comentários e analisar as emoções presentes neles.
+
+Fluxo obrigatório:
+1. Use a ferramenta search_videos para pesquisar vídeos relevantes sobre o tema solicitado.
+2. Use a ferramenta get_video_comments para coletar comentários reais dos vídeos encontrados.
+3. Analise somente os dados retornados pelas ferramentas.
+4. Depois da análise, retorne a resposta final.
+
+Regras:
+- Sempre utilize as ferramentas disponíveis do YouTube para pesquisar vídeos e obter comentários.
+- Não invente vídeos, comentários, métricas ou emoções quando uma ferramenta estiver disponível.
+- Utilize apenas informações obtidas pelas ferramentas para realizar a análise.
+- Analise os comentários identificando a distribuição das emoções predominantes e os principais insights.
+- Selecione comentários representativos e associe a emoção predominante de cada um.
+- Todas as respostas devem estar em Português do Brasil.
+- Em top_comments, mantenha o texto do comentário exatamente como retornado pela ferramenta, sem traduzir, resumir ou reescrever.
+- A resposta FINAL deve ser APENAS um objeto JSON válido.
+- O JSON deve seguir exatamente o schema EmotionAnalysisReport.
+- Não inclua markdown.
+- Não utilize blocos de código.
+- Não adicione explicações, introduções, conclusões ou qualquer texto fora do JSON.
+- Todos os campos obrigatórios do schema devem estar presentes.
+- Se alguma informação não puder ser obtida, utilize valores vazios apropriados ao tipo do campo (string vazia, lista vazia ou objeto vazio), mantendo o schema válido.
+""".strip()
 
 
 class EmotionAnalysisReport(BaseModel):

@@ -1,6 +1,7 @@
 import json
 from googleapiclient.discovery import build
 from agno.tools import Toolkit
+from agno.tools.function import Function
 
 
 class YouTubeCommentsTools(Toolkit):
@@ -16,7 +17,10 @@ class YouTubeCommentsTools(Toolkit):
     def __init__(self, api_key: str, **kwargs):
         print(f"[YouTubeTools] Inicializando com API key: {api_key[:8]}...")
         self.youtube = build("youtube", "v3", developerKey=api_key)
-        tools = [self.search_videos, self.get_video_comments]
+        tools = [
+            Function.from_callable(self.search_videos),
+            Function.from_callable(self.get_video_comments),
+        ]
         super().__init__(name="youtube_comments_tools", tools=tools, **kwargs)
         print("[YouTubeTools] Inicializado com sucesso")
 
@@ -27,7 +31,7 @@ class YouTubeCommentsTools(Toolkit):
 
         Args:
             query: Termo de busca.
-            max_results: Máximo de vídeos a retornar (1-50).
+            max_results: Máximo de vídeos a retornar (1-10).
             order: Critério de ordenação (viewCount, relevance, date, rating).
 
         Returns:
@@ -55,7 +59,7 @@ class YouTubeCommentsTools(Toolkit):
 
         Args:
             video_id: ID do vídeo no YouTube.
-            max_results: Máximo de comentários a retornar (1-100).
+            max_results: Máximo de comentários a retornar (1-50).
             order: Ordenação (relevance ou time).
 
         Returns:

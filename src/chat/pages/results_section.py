@@ -20,7 +20,7 @@ def summary_card() -> rx.Component:
 
 
 def emotion_pie_chart() -> rx.Component:
-    palette = ["#4f46e5", "#ec4899", "#10b981", "#f59e0b", "#3b82f6", "#8b5cf6"]
+    palette = ["#10b981", "#ec4899", "#4f46e5"]
     pie_cells = [rx.recharts.cell(fill=color) for color in palette]
 
     return rx.card(
