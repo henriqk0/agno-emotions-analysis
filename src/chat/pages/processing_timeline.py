@@ -32,7 +32,6 @@ def processing_timeline() -> rx.Component:
         rx.vstack(
             rx.spinner(size="2"),
             rx.heading("Analisando...", size="5"),
-            rx.text("Acompanhe o processo em tempo real.", size="2", color=rx.color("mauve", 10)),
             rx.cond(
                 State.steps,
                 rx.vstack(
