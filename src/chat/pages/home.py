@@ -41,6 +41,7 @@ def home_page() -> rx.Component:
                 spacing="3",
                 width="100%",
                 max_width="600px",
+                align_items="center",
             ),
             rx.divider(width="100%", max_width="600px"),
             rx.heading("Ferramentas disponíveis", size="5"),
@@ -55,7 +56,7 @@ def home_page() -> rx.Component:
             padding="40px 16px",
             align_items="center",
             width="100%",
-            max_width="900px",
+            max_width="900px"
         ),
         flex="1",
         padding="16px",
