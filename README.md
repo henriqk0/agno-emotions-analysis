@@ -47,7 +47,7 @@ YOUTUBE_DATA_API_KEY=<YOUR_YOUTUBE_DATA_API_KEY>
 
 Onde conseguir as chaves:
 
-- `OPENROUTER_API_KEY`: crie uma chave em https://cloud.sambanova.ai/
+- `SAMBANOVA_API_KEY`: crie uma chave em https://cloud.sambanova.ai/
 - `YOUTUBE_DATA_API_KEY`: crie uma chave no Google Cloud Console com a **YouTube Data API v3** ativada.
 
 Para a chave do YouTube, use acesso a **dados publicos**. Nao e necessario OAuth nem conta de servico para ler comentarios publicos.
