@@ -1,18 +1,25 @@
 import os
 import json
 import asyncio
+import logging
+
 from dotenv import load_dotenv
+
+from agno.agent import Agent
+from agno.models.sambanova import Sambanova
 
 from core.agent import AgentFactory
 from core.youtube_comment_tools import YouTubeCommentsTools
 from core.settings import MODEL_LIST, AGENT_INSTRUCTIONS, EmotionAnalysisReport
 
+for name in ["agno", "agno.agno", "agno.utils", "agno-team", "agno-workflow", "httpx"]:
+    logging.getLogger(name).setLevel(logging.WARNING)
+
 load_dotenv()
 
 youtube_api_key = os.getenv("YOUTUBE_DATA_API_KEY")
 
-# Exemplo do JSON que a LLM deve retornar.
-# Incluído no prompt para reduzir ambiguidade sobre o schema esperado.
+
 SCHEMA_EXAMPLE = json.dumps(
     {
         "summary": "Resumo da análise em português",
@@ -22,46 +29,28 @@ SCHEMA_EXAMPLE = json.dumps(
         "top_comments": [
                 {"text": "Ótimo vídeo, muito informativo!", "emotion": "alegria"},
                 {"text": "Isso me deixou bem irritado.", "emotion": "raiva"},
-                {"text": "Fiquei surpreso com os dados apresentados.", "emotion": "surpresa"},
-                {"text": "Triste ver isso acontecendo.", "emotion": "tristeza"},
-                {"text": "Isso me deixou com medo do futuro.", "emotion": "medo"},
         ],
     },
     indent=2,
 )
 
 
-def _extract_json(text: str) -> str:
-    """Extrai o primeiro objeto JSON válido de uma string.
-
-    A LLM ocasionalmente adiciona texto antes/depois do JSON.
-    Esta função localiza o bloco JSON procurando por '{"summary"'
-    como âncora (fallback para o primeiro '{' encontrado).
-
-    Args:
-        text: String bruta retornada pela LLM.
-
-    Returns:
-        String JSON extraída, ou '' se nenhum JSON for encontrado.
-    """
-    start = text.find('{"summary"')
+def _extract_json(text: str) -> str | None:
+    stripped = text.strip()
+    if stripped.startswith("```") and stripped.endswith("```"):
+        stripped = stripped[3:-3].strip()
+        if stripped.startswith("json"):
+            stripped = stripped[4:].strip()
+    start = stripped.find('{"summary"')
     if start == -1:
-        start = text.find("{")
-    end = text.rfind("}")
+        start = stripped.find("{")
+    end = stripped.rfind("}")
     if start == -1 or end == -1 or end <= start:
-        return ""
-    return text[start : end + 1]
+        return None
+    return stripped[start : end + 1]
 
 
 def _tool_args_summary(args_str: str) -> str:
-    """Extrai um resumo legível dos argumentos de uma tool call.
-
-    Args:
-        args_str: JSON string com os argumentos da tool.
-
-    Returns:
-        String amigável para exibir na timeline (ex: '"games", 5 resultados').
-    """
     try:
         args = json.loads(args_str)
         query = args.get("query", "")
@@ -80,15 +69,6 @@ def _tool_args_summary(args_str: str) -> str:
 
 
 def _tool_label(name: str, args_summary: str) -> str:
-    """Gera o label amigável de uma tool call para a timeline da UI.
-
-    Args:
-        name: Nome da tool (search_videos, get_video_comments).
-        args_summary: Resumo dos argumentos (via _tool_args_summary).
-
-    Returns:
-        String com ícone e descrição para exibir na timeline.
-    """
     labels = {
         "search_videos": f"🔍 Buscando vídeos sobre {args_summary}",
         "get_video_comments": f"💬 Coletando comentários ({args_summary})",
@@ -97,19 +77,6 @@ def _tool_label(name: str, args_summary: str) -> str:
 
 
 def _error_report(msg: str) -> str:
-    """Cria uma mensagem de resultado de erro no formato que o frontend espera.
-
-    Em vez de retornar JSON inválido ou quebrar o schema, preenche um
-    EmotionAnalysisReport vazio com a mensagem de erro no campo summary.
-    O frontend detecta summary começando com 'Erro' ou 'A API' e exibe
-    o card de erro amigável.
-
-    Args:
-        msg: Mensagem de erro descritiva.
-
-    Returns:
-        JSON string no formato {"type": "result", "data": {...}}.
-    """
     return json.dumps({
         "type": "result",
         "data": EmotionAnalysisReport(
@@ -122,33 +89,51 @@ def _error_report(msg: str) -> str:
     })
 
 
-class AgentService:
-    """Orquestra a execução do agente Agno e retorna resultados para o frontend.
+def _extract_actions_from_messages(messages) -> list[str]:
+    labels = []
+    for msg in messages or []:
+        tool_calls = getattr(msg, "tool_calls", None) or []
+        for tc in tool_calls:
+            fn = tc.get("function") if isinstance(tc, dict) else getattr(tc, "function", None)
+            if fn:
+                args_str = fn.get("arguments", "{}") if isinstance(fn, dict) else getattr(fn, "arguments", "{}")
+                name = fn.get("name") if isinstance(fn, dict) else getattr(fn, "name", "")
+                args_summary = _tool_args_summary(args_str)
+                labels.append(_tool_label(name, args_summary))
+    return labels
 
-    É um async generator: cada yield envia uma mensagem JSON para o state do Reflex.
-    O frontend recebe primeiro os steps (tool calls executadas) e por fim o resultado.
-    """
+
+def _extract_comments_from_messages(messages) -> list[dict]:
+    comments = []
+    for msg in messages or []:
+        role = getattr(msg, "role", "")
+        tool_name = getattr(msg, "tool_name", "")
+        if role == "tool" and tool_name == "get_video_comments":
+            try:
+                data = json.loads(msg.content)
+                comments.extend(data)
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                pass
+    return comments
+
+
+def _format_comments(comments: list[dict], max_comments: int = 50) -> str:
+    if not comments:
+        return "(nenhum comentário encontrado)"
+    truncated = comments[:max_comments]
+    lines = []
+    for i, c in enumerate(truncated, 1):
+        text = c.get("text", "").replace("\n", " ").strip()
+        author = c.get("author", "desconhecido")
+        likes = c.get("likes", 0)
+        lines.append(f"{i}. [{author} | {likes} likes] {text}")
+    return "\n".join(lines)
+
+
+class AgentService:
 
     @staticmethod
     async def run(question: str, model_id: str):
-        """Executa a análise completa: LLM → tools → validação → resultado.
-
-        Fluxo:
-        1. Valida chave da API do YouTube
-        2. Monta prompt com schema explícito
-        3. Tenta modelo atual com retry (3x, backoff exponencial)
-        4. Se falhar, tenta próximo modelo da lista
-        5. Extrai steps (tool calls) de response.messages e envia para UI
-        6. Extrai JSON, valida contra EmotionAnalysisReport
-        7. Envia resultado final ou erro amigável
-
-        Args:
-            question: Tema digitado pelo usuário.
-            model_id: Modelo OpenRouter selecionado.
-
-        Yields:
-            JSON strings com type="step" (timeline) ou type="result" (final).
-        """
         print(f"[AgentService] Iniciando análise para: {question[:80]}")
         print(f"[AgentService] Modelo selecionado: {model_id}")
 
@@ -157,88 +142,139 @@ class AgentService:
             yield _error_report("Erro: chave da API do YouTube não configurada.")
             return
 
-        prompt = (
-            f"Analyze the emotions expressed in the top comments "
-            f"of the most popular {question} videos.\n\n"
-            f"Return ONLY a JSON object with this exact structure "
-            f"(no markdown, no extra text):\n{SCHEMA_EXAMPLE}\n\n"
-            "Use only the example structure; do not copy the example values. "
-            "Generate actual emotion distribution values and insights based on the current topic. "
-            "Include up to 5 representative `top_comments` (each with `text` and `emotion`). "
-            "If fewer comments are available, return as many as found. Use Portuguese for text values."
-        )
-
-        # Tenta o modelo atual primeiro; se esgotar retries, tenta os demais.
         models_to_try = [model_id] + [m for m in MODEL_LIST if m != model_id]
         last_error = ""
-        response = None
-        raw = ""
+        phase1_response = None
+        real_comments = []
+
+        # ── Phase 1: Fetch real comments via tools ──────────────────────
+        phase1_prompt = (
+            f"Find the most popular YouTube videos about '{question}' "
+            f"using search_videos (max_results=10). "
+            f"Then use get_video_comments (max_results=100) to fetch "
+            f"comments from AT LEAST 3 different videos. "
+            f"After collecting all data, summarize what you found."
+        )
 
         for model in models_to_try:
             if model != model_id:
                 print(f"[AgentService] Modelo {model_id} falhou, tentando {model}")
 
-            print("[AgentService] Criando agente...")
-            agent = AgentFactory.create_agent(
-                model_id=model,
-                agent_instructions=AGENT_INSTRUCTIONS,
-                available_tools=[YouTubeCommentsTools(api_key=youtube_api_key)],
-            )
-
             for attempt in range(3):
-                print(f"[AgentService] Tentativa {attempt + 1}/3 com {model}...")
+                print(f"[AgentService] Fase 1 - Tentativa {attempt + 1}/3 com {model}...")
                 try:
-                    response = agent.run(prompt, stream=False)
-                    raw = _extract_json(response.content or "")
-                    if raw:
-                        break
-                    last_error = response.content[:200]
-                    print(f"[AgentService] Sem JSON na resposta, aguardando {2 ** attempt}s...")
+                    agent = AgentFactory.create_agent(
+                        model_id=model,
+                        agent_instructions=AGENT_INSTRUCTIONS,
+                        available_tools=[YouTubeCommentsTools(api_key=youtube_api_key)],
+                    )
+                    phase1_response = agent.run(phase1_prompt, stream=False)
+                    if phase1_response:
+                        real_comments = _extract_comments_from_messages(phase1_response.messages)
+                        if real_comments:
+                            print(f"[AgentService] {len(real_comments)} comentários reais extraídos")
+                            break
+                    last_error = "No response from Phase 1"
                     await asyncio.sleep(2 ** attempt)
                 except Exception as e:
                     last_error = str(e)
-                    print(f"[AgentService] Exceção: {e}, aguardando {2 ** attempt}s...")
+                    print(f"[AgentService] Exceção Fase 1: {e}, aguardando {2 ** attempt}s...")
                     await asyncio.sleep(2 ** attempt)
 
-            if raw:
+            if real_comments:
                 break
-            print(f"[AgentService] Modelo {model} esgotou tentativas")
+            print(f"[AgentService] Modelo {model} esgotou tentativas na Fase 1")
 
-        if not raw:
+        # Early exit if no comments found
+        if not real_comments:
+            print(f"[AgentService] Nenhum comentário real encontrado")
+            yield _error_report(
+                "Não foi possível coletar comentários do YouTube. "
+                "Tente novamente com um tema diferente."
+            )
+            return
+
+        # ── Yield action steps from Phase 1 ─────────────────────────
+        steps = _extract_actions_from_messages(phase1_response.messages)
+        print(f"[AgentService] Actions detectadas: {len(steps)}")
+        for label in steps:
+            yield json.dumps({"type": "step", "step_type": "tool_call", "label": label, "status": "done"})
+            await asyncio.sleep(0.15)
+
+        # ── Phase 2: Analyze without tools (no function-calling errors) ──
+        yield json.dumps({"type": "step", "step_type": "reasoning", "label": "Analisando sentimentos nos comentários..."})
+        comments_text = _format_comments(real_comments)
+        phase2_prompt = (
+            f"Analyze the emotions expressed in these real YouTube comments "
+            f"about '{question}'.\n\n"
+            f"REAL COMMENTS:\n{comments_text}\n\n"
+            "IMPORTANTE:\n"
+            "- Analise APENAS o texto real dos comentários acima.\n"
+            "- NÃO invente comentários, emoções ou distribuições.\n"
+            "- Cada comentário em top_comments deve estar PRESENTE na lista acima,\n"
+            "  com o texto EXATO como aparece.\n"
+            "- Use português do Brasil para o resumo e insights.\n\n"
+            f"Retorne APENAS um JSON válido com esta estrutura (sem markdown, sem código extra):\n"
+            f"{SCHEMA_EXAMPLE}"
+        )
+
+        analysis_agent = Agent(
+            model=Sambanova(id=model_id),
+            instructions=AGENT_INSTRUCTIONS,
+        )
+
+        print(f"[AgentService] Fase 2: Analisando {len(real_comments)} comentários...")
+        analysis_response = None
+        analysis_error = ""
+
+        for attempt in range(3):
+            try:
+                analysis_response = analysis_agent.run(phase2_prompt, stream=False)
+                if analysis_response and analysis_response.content:
+                    # Try to parse JSON directly (should work since no tools)
+                    raw = _extract_json(analysis_response.content)
+                    if raw:
+                        # Validate against schema
+                        EmotionAnalysisReport.model_validate_json(raw)
+                        break
+                    else:
+                        analysis_error = "JSON não encontrado na resposta"
+                        print(f"[AgentService] Tentativa {attempt + 1}: {analysis_error}")
+                        await asyncio.sleep(2 ** attempt)
+                else:
+                    analysis_error = "Resposta vazia"
+                    await asyncio.sleep(2 ** attempt)
+            except Exception as e:
+                analysis_error = str(e)
+                print(f"[AgentService] Exceção Fase 2: {e}, aguardando {2 ** attempt}s...")
+                await asyncio.sleep(2 ** attempt)
+
+        if not analysis_response or not analysis_response.content:
             yield _error_report(
                 "A API de IA está temporariamente sobrecarregada. "
                 "Tente novamente em alguns instantes."
             )
             return
 
-        # Extrai tool calls reais da mensagens do agente para exibir na timeline.
-        steps = []
-        for msg in response.messages or []:
-            tool_calls = getattr(msg, "tool_calls", None) or []
-            for tc in tool_calls:
-                fn = getattr(tc, "function", None)
-                if fn:
-                    args_summary = _tool_args_summary(fn.arguments or "{}")
-                    label = _tool_label(fn.name, args_summary)
-                    steps.append(label)
-
-        print(f"[AgentService] Steps detectados: {len(steps)}")
-        for label in steps:
-            yield json.dumps({"type": "step", "step_type": "tool_call", "label": label, "status": "done"})
-            await asyncio.sleep(0.15)
-
-        print(f"[AgentService] JSON extraído: {len(raw)} chars (de {len(response.content or '')} brutos)")
-
-        try:
-            report = EmotionAnalysisReport.model_validate_json(raw)
-            print(f"[AgentService] Relatório validado com sucesso")
-            print(f"[AgentService] Distribuição: {report.emotion_distribution}")
-            print(f"[AgentService] Insights: {len(report.key_insights)} encontrados")
-            print(f"[AgentService] Comentários em destaque: {len(report.top_comments)}")
-            yield json.dumps({"type": "result", "data": report.model_dump()})
-        except Exception as e:
-            print(f"[AgentService] ERRO ao validar JSON: {e}")
-            print(f"[AgentService] JSON extraído (início): {raw[:300]}...")
+        raw = _extract_json(analysis_response.content)
+        if not raw:
+            print(f"[AgentService] JSON não encontrado na resposta da Fase 2")
             yield _error_report(
                 "Erro ao processar resposta da IA. Tente novamente com um tema diferente."
             )
+            return
+
+        try:
+            report = EmotionAnalysisReport.model_validate_json(raw)
+        except Exception as e:
+            print(f"[AgentService] Falha ao validar resposta: {e}")
+            yield _error_report(
+                "Erro ao processar resposta da IA. Tente novamente com um tema diferente."
+            )
+            return
+
+        print(f"[AgentService] Relatório validado com sucesso")
+        print(f"[AgentService] Distribuição: {report.emotion_distribution}")
+        print(f"[AgentService] Insights: {len(report.key_insights)} encontrados")
+        print(f"[AgentService] Comentários em destaque: {len(report.top_comments)}")
+        yield json.dumps({"type": "result", "data": report.model_dump()})

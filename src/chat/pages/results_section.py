@@ -11,7 +11,7 @@ def summary_card() -> rx.Component:
                 spacing="2",
             ),
             rx.divider(),
-            rx.markdown(State.analysis_result["summary"]),
+            rx.markdown(State.result_summary),
             spacing="2",
             align_items="stretch",
         ),
@@ -99,7 +99,7 @@ def key_insights_list() -> rx.Component:
             ),
             rx.divider(),
             rx.foreach(
-                State.analysis_result["key_insights"],
+                State.result_key_insights,
                 lambda insight: rx.hstack(
                     rx.icon("circle-check", size=16, color=rx.color("accent", 9)),
                     rx.text(insight, size="2"),
@@ -144,7 +144,7 @@ def top_comments_list() -> rx.Component:
                 spacing="2",
             ),
             rx.divider(),
-            rx.foreach(State.analysis_result["top_comments"], comment_card),
+            rx.foreach(State.result_top_comments, comment_card),
             spacing="2",
             align_items="stretch",
         ),

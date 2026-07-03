@@ -27,7 +27,7 @@ class State(rx.State):
     user_input: str = ""
     processing: bool = False
     processing_stage: str = "idle"
-    analysis_result: EmotionAnalysisReport | None = None
+    analysis_result: dict | None = None
     error: str = ""
 
     current_model: str = DEFAULT_MODEL
@@ -75,6 +75,30 @@ class State(rx.State):
             {"name": k.capitalize(), "value": v}
             for k, v in emotions.items()
         ]
+
+    @rx.var
+    def result_summary(self) -> str:
+        if not self.analysis_result:
+            return ""
+        if isinstance(self.analysis_result, dict):
+            return self.analysis_result.get("summary", "")
+        return self.analysis_result.summary
+
+    @rx.var
+    def result_key_insights(self) -> list[str]:
+        if not self.analysis_result:
+            return []
+        if isinstance(self.analysis_result, dict):
+            return self.analysis_result.get("key_insights", [])
+        return self.analysis_result.key_insights
+
+    @rx.var
+    def result_top_comments(self) -> list[dict]:
+        if not self.analysis_result:
+            return []
+        if isinstance(self.analysis_result, dict):
+            return self.analysis_result.get("top_comments", [])
+        return self.analysis_result.top_comments
 
     @rx.var
     def is_processing(self) -> bool:
@@ -168,7 +192,7 @@ class State(rx.State):
                         self.processing_stage = "idle"
 
                     else:
-                        self.analysis_result = report
+                        self.analysis_result = report.model_dump()
                         print("[State] Análise concluída com sucesso")
                         self.processing_stage = "complete"
 
