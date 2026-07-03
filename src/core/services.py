@@ -150,8 +150,8 @@ class AgentService:
         # ── Phase 1: Fetch real comments via tools ──────────────────────
         phase1_prompt = (
             f"Find the most popular YouTube videos about '{question}' "
-            f"using search_videos (max_results=10). "
-            f"Then use get_video_comments (max_results=100) to fetch "
+            f"using search_videos (max_results=5). "
+            f"Then use get_video_comments (max_results=50) to fetch "
             f"comments from AT LEAST 3 different videos. "
             f"After collecting all data, summarize what you found."
         )
